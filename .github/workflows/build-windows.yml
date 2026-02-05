@@ -53,7 +53,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install Rust stable
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
