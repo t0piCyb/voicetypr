@@ -1,0 +1,241 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_to_release:
+        description: 'Upload to existing release'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          echo "VERSION=$($pkg.version)" >> $env:GITHUB_OUTPUT
+          echo "TAG=v$($pkg.version)" >> $env:GITHUB_OUTPUT
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.1.1
+        with:
+          version: 1.3.268.0
+          cache: true
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ensure ffmpeg sidecars
+        run: pnpm run sidecar:ensure-ffmpeg
+
+      - name: Build Tauri app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --ci
+
+      - name: Prepare artifacts
+        id: artifacts
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $outputDir = "release-windows-$version"
+          New-Item -ItemType Directory -Path $outputDir -Force
+
+          # Find and copy the installer
+          $installer = Get-ChildItem "src-tauri\target\release\bundle\nsis\*.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $installer) {
+            Write-Error "No installer found!"
+            exit 1
+          }
+
+          $installerName = "VoiceTypr_${version}_x64-setup.exe"
+          $installerPath = "$outputDir\$installerName"
+          Copy-Item $installer.FullName $installerPath
+
+          echo "INSTALLER_PATH=$installerPath" >> $env:GITHUB_OUTPUT
+          echo "INSTALLER_NAME=$installerName" >> $env:GITHUB_OUTPUT
+          echo "OUTPUT_DIR=$outputDir" >> $env:GITHUB_OUTPUT
+
+      - name: Sign installer
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $installerPath = "${{ steps.artifacts.outputs.INSTALLER_PATH }}"
+
+          # Create temp key file
+          $keyPath = "$env:TEMP\tauri.key"
+          $env:TAURI_SIGNING_PRIVATE_KEY | Out-File -FilePath $keyPath -Encoding UTF8 -NoNewline
+
+          if ([string]::IsNullOrEmpty($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            pnpm tauri signer sign -f $keyPath --password= $installerPath
+          } else {
+            pnpm tauri signer sign -f $keyPath -p $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD $installerPath
+          }
+
+          Remove-Item $keyPath -Force
+
+          if (Test-Path "$installerPath.sig") {
+            Write-Host "Installer signed successfully"
+          } else {
+            Write-Error "Failed to sign installer"
+            exit 1
+          }
+
+      - name: Create/Update latest.json
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $tag = "${{ steps.version.outputs.TAG }}"
+          $outputDir = "${{ steps.artifacts.outputs.OUTPUT_DIR }}"
+          $installerName = "${{ steps.artifacts.outputs.INSTALLER_NAME }}"
+          $latestJsonPath = "$outputDir\latest.json"
+
+          # Read signature
+          $sigPath = "${{ steps.artifacts.outputs.INSTALLER_PATH }}.sig"
+          $signature = ""
+          if (Test-Path $sigPath) {
+            $signature = (Get-Content $sigPath -Raw).Trim() -replace "`r`n", "" -replace "`n", ""
+          }
+
+          # Try to download existing latest.json from release
+          try {
+            gh release download $tag -p "latest.json" -D $outputDir --clobber 2>&1 | Out-Null
+          } catch {
+            Write-Host "No existing latest.json found, creating new one"
+          }
+
+          if (Test-Path $latestJsonPath) {
+            # Update existing latest.json
+            $latestJson = Get-Content $latestJsonPath -Raw | ConvertFrom-Json
+
+            if (-not $latestJson.platforms) {
+              $latestJson | Add-Member -NotePropertyName "platforms" -NotePropertyValue @{} -Force
+            }
+
+            $windowsPlatform = @{
+              signature = $signature
+              url = "https://github.com/moinulmoin/voicetypr/releases/download/$tag/$installerName"
+            }
+            $latestJson.platforms | Add-Member -NotePropertyName "windows-x86_64" -NotePropertyValue $windowsPlatform -Force
+
+            $latestJson | ConvertTo-Json -Depth 10 | Set-Content $latestJsonPath
+          } else {
+            # Create new latest.json
+            $latestJson = @{
+              version = $tag
+              notes = "See the release notes for $tag"
+              pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+              platforms = @{
+                "windows-x86_64" = @{
+                  signature = $signature
+                  url = "https://github.com/moinulmoin/voicetypr/releases/download/$tag/$installerName"
+                }
+              }
+            }
+            $latestJson | ConvertTo-Json -Depth 10 | Set-Content $latestJsonPath
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            ${{ steps.artifacts.outputs.OUTPUT_DIR }}/*.exe
+            ${{ steps.artifacts.outputs.OUTPUT_DIR }}/*.exe.sig
+            ${{ steps.artifacts.outputs.OUTPUT_DIR }}/latest.json
+
+      - name: Upload to GitHub Release
+        if: inputs.upload_to_release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ steps.version.outputs.TAG }}"
+          $outputDir = "${{ steps.artifacts.outputs.OUTPUT_DIR }}"
+
+          # Check if release exists
+          $releaseExists = $false
+          try {
+            gh release view $tag 2>&1 | Out-Null
+            $releaseExists = $true
+          } catch {
+            Write-Host "Release $tag not found"
+          }
+
+          if (-not $releaseExists) {
+            Write-Host "Creating draft release $tag"
+            gh release create $tag --draft --title "VoiceTypr $tag" --generate-notes
+          }
+
+          # Upload installer
+          Write-Host "Uploading installer..."
+          gh release upload $tag "$outputDir\${{ steps.artifacts.outputs.INSTALLER_NAME }}" --clobber
+
+          # Upload signature if exists
+          $sigFile = "$outputDir\${{ steps.artifacts.outputs.INSTALLER_NAME }}.sig"
+          if (Test-Path $sigFile) {
+            Write-Host "Uploading signature..."
+            gh release upload $tag $sigFile --clobber
+          }
+
+          # Upload latest.json
+          $latestJson = "$outputDir\latest.json"
+          if (Test-Path $latestJson) {
+            Write-Host "Uploading latest.json..."
+            gh release upload $tag $latestJson --clobber
+          }
+
+          Write-Host "Upload complete!"
