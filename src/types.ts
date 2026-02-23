@@ -48,7 +48,6 @@ export interface AppSettings {
   transcription_cleanup_days?: number | null;
   launch_at_startup?: boolean;
   onboarding_completed?: boolean;
-  check_updates_automatically?: boolean;
   selected_microphone?: string | null;
   // Push-to-talk support
   recording_mode?: RecordingMode;

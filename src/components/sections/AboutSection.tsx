@@ -1,23 +1,17 @@
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { open } from '@tauri-apps/plugin-shell';
 import { getVersion } from '@tauri-apps/api/app';
-import { 
+import {
   ExternalLink,
   Globe,
-  Info,
-  RefreshCw
+  Info
 } from "lucide-react";
 import XIcon from "@/components/icons/XIcon";
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { updateService } from '@/services/updateService';
 
 export function AboutSection() {
   const [appVersion, setAppVersion] = useState<string>('');
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-
   useEffect(() => {
     const fetchVersion = async () => {
       try {
@@ -32,18 +26,11 @@ export function AboutSection() {
     fetchVersion();
   }, []);
 
-  const handleCheckUpdate = async () => {
-    setIsCheckingUpdate(true);
-    await updateService.checkForUpdatesManually();
-    setIsCheckingUpdate(false);
-  };
-
   const openExternalLink = async (url: string) => {
     try {
       await open(url);
     } catch (error) {
       console.error('Failed to open external link:', error);
-      toast.error('Failed to open link');
     }
   };
 
@@ -78,17 +65,6 @@ export function AboutSection() {
                 </Badge>
               </div>
 
-              <div className="flex justify-center">
-                <Button
-                  onClick={handleCheckUpdate}
-                  disabled={isCheckingUpdate}
-                  variant="ghost"
-                  size="sm"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
-                  {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
-                </Button>
-              </div>
             </div>
           </div>
 

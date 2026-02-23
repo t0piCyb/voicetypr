@@ -199,7 +199,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
             autostart
         })
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init());
 
@@ -451,8 +450,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     } else if event_id == "quit" {
                         app.exit(0);
-                    } else if event_id == "check_updates" {
-                        let _ = app.emit("tray-check-updates", ());
                     } else if event_id.starts_with("model_") {
                         // Handle model selection
                         let model_name = match event_id.strip_prefix("model_") {

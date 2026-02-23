@@ -50,14 +50,6 @@ vi.mock('@/contexts/ModelManagementContext', () => ({
   })
 }));
 
-// Mock services
-vi.mock('@/services/updateService', () => ({
-  updateService: {
-    initialize: vi.fn().mockResolvedValue(true),
-    dispose: vi.fn()
-  }
-}));
-
 vi.mock('@/utils/keyring', () => ({
   loadApiKeysToCache: vi.fn().mockResolvedValue(true)
 }));

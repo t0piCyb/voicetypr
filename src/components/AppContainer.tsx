@@ -10,7 +10,6 @@ import { useReadiness } from "@/contexts/ReadinessContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useEventCoordinator } from "@/hooks/useEventCoordinator";
 import { useModelManagementContext } from "@/contexts/ModelManagementContext";
-import { updateService } from "@/services/updateService";
 import { loadApiKeysToCache } from "@/utils/keyring";
 
 // Type for error event payloads from backend
@@ -54,11 +53,6 @@ export function AppContainer() {
           });
         }
 
-        // Initialize update service for automatic update checks
-        if (settings) {
-          await updateService.initialize(settings);
-        }
-
         // Load API keys from Stronghold to backend cache
         // Small delay to ensure Stronghold is ready
         setTimeout(() => {
@@ -78,16 +72,6 @@ export function AppContainer() {
         registerEvent("navigate-to-settings", () => {
           console.log("Navigate to settings requested from tray menu");
           setActiveSection("overview");
-        });
-
-        // Listen for manual update checks triggered from tray
-        registerEvent("tray-check-updates", async () => {
-          try {
-            await updateService.checkForUpdatesManually();
-          } catch (e) {
-            console.error("Manual update check failed:", e);
-            toast.error("Failed to check for updates");
-          }
         });
 
         // Listen for tray action errors
@@ -120,7 +104,6 @@ export function AppContainer() {
 
         return () => {
           window.removeEventListener("no-models-available", handleNoModels);
-          updateService.dispose();
         };
       } catch (error) {
         console.error("Failed to initialize:", error);
@@ -147,8 +130,6 @@ export function AppContainer() {
         console.log("Permissions refreshed after onboarding completion");
       });
 
-      // Request notification permission for update notifications
-      updateService.requestNotificationPermission();
     }
   }, [
     showOnboarding,

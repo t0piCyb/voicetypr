@@ -14,7 +14,6 @@ mod tests {
         assert_eq!(settings.transcription_cleanup_days, None);
         assert_eq!(settings.launch_at_startup, false);
         assert_eq!(settings.onboarding_completed, false);
-        assert_eq!(settings.check_updates_automatically, true); // Default to true
     }
 
     #[test]
@@ -30,7 +29,6 @@ mod tests {
             launch_at_startup: false,
             onboarding_completed: true,
             translate_to_english: false,
-            check_updates_automatically: true,
             selected_microphone: None,
             recording_mode: "toggle".to_string(),
             use_different_ptt_key: false,
@@ -89,7 +87,6 @@ mod tests {
             launch_at_startup: true,
             onboarding_completed: false,
             translate_to_english: true,
-            check_updates_automatically: true,
             selected_microphone: Some("USB Microphone".to_string()),
             recording_mode: "push_to_talk".to_string(),
             use_different_ptt_key: true,

@@ -286,13 +286,6 @@ pub async fn build_tray_menu<R: tauri::Runtime>(
 
     let separator1 = PredefinedMenuItem::separator(app)?;
     let settings_i = MenuItem::with_id(app, "settings", "Dashboard", true, None::<&str>)?;
-    let check_updates_i = MenuItem::with_id(
-        app,
-        "check_updates",
-        "Check for Updates",
-        true,
-        None::<&str>,
-    )?;
     let separator2 = PredefinedMenuItem::separator(app)?;
     let quit_i = MenuItem::with_id(app, "quit", "Quit VoiceTypr", true, None::<&str>)?;
 
@@ -320,7 +313,6 @@ pub async fn build_tray_menu<R: tauri::Runtime>(
     let menu = menu_builder
         .item(&separator1)
         .item(&settings_i)
-        .item(&check_updates_i)
         .item(&separator2)
         .item(&quit_i)
         .build()?;

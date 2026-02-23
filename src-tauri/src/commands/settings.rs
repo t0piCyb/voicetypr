@@ -22,7 +22,6 @@ pub struct Settings {
     pub pill_position: Option<(f64, f64)>,
     pub launch_at_startup: bool,
     pub onboarding_completed: bool,
-    pub check_updates_automatically: bool,
     pub selected_microphone: Option<String>,
     // Push-to-talk support
     pub recording_mode: String, // "toggle" or "push_to_talk"
@@ -48,7 +47,6 @@ impl Default for Settings {
             pill_position: None,              // No saved position initially
             launch_at_startup: false,         // Default to not launching at startup
             onboarding_completed: false,      // Default to not completed
-            check_updates_automatically: true, // Default to automatic updates enabled
             selected_microphone: None,        // Default to system default microphone
             recording_mode: "toggle".to_string(), // Default to toggle mode for backward compatibility
             use_different_ptt_key: false,         // Default to using same key
@@ -113,10 +111,6 @@ pub async fn get_settings(app: AppHandle) -> Result<Settings, String> {
             .get("onboarding_completed")
             .and_then(|v| v.as_bool())
             .unwrap_or_else(|| Settings::default().onboarding_completed),
-        check_updates_automatically: store
-            .get("check_updates_automatically")
-            .and_then(|v| v.as_bool())
-            .unwrap_or_else(|| Settings::default().check_updates_automatically),
         selected_microphone: store
             .get("selected_microphone")
             .and_then(|v| v.as_str().map(|s| s.to_string())),
@@ -184,10 +178,6 @@ pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), Str
     );
     store.set("launch_at_startup", json!(settings.launch_at_startup));
     store.set("onboarding_completed", json!(settings.onboarding_completed));
-    store.set(
-        "check_updates_automatically",
-        json!(settings.check_updates_automatically),
-    );
     store.set("selected_microphone", json!(settings.selected_microphone));
 
     // Save push-to-talk settings

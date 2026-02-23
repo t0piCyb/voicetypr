@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useState } from 'react';
-import { updateService } from '@/services/updateService';
 
 type RecordingState = 'idle' | 'starting' | 'recording' | 'stopping' | 'transcribing' | 'error';
 
@@ -86,13 +85,6 @@ export function useRecording(): UseRecordingReturn {
     };
   }, []);
 
-
-  // Sync session state with update service to prevent auto-updates during recording
-  // Note: Only react to actual state changes from backend, not component lifecycle
-  useEffect(() => {
-    const isActive = state !== 'idle' && state !== 'error';
-    updateService.setSessionActive(isActive);
-  }, [state]);
 
   // Simple command invocations - let backend handle all state management
   const startRecording = useCallback(async () => {
